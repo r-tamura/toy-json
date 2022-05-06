@@ -3,6 +3,8 @@ use std::fmt;
 // https://www.rfc-editor.org/rfc/rfc4627#section-2
 #[derive(Debug, PartialEq)]
 pub enum Token {
+    Null,         // null
+    Bool(bool),   // true or false
     LeftBrace,    // '{'
     RightBrace,   // '}'
     LeftBracket,  // '['
@@ -22,20 +24,54 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn read_char_and_token(&mut self, token: Token) -> Option<Token> {
+        self.input.next();
+        Some(token)
+    }
+
     pub fn next_token(&mut self) -> Result<Option<Token>, LexerError> {
+        self.skip_whitespaces();
         if let Some(char) = self.input.peek() {
-            let token = match char {
-                '{' => Token::LeftBrace,
-                '}' => Token::RightBrace,
-                '[' => Token::LeftBracket,
-                ']' => Token::RightBracket,
-                ':' => Token::Colon,
-                ',' => Token::Comma,
-                _ => return Ok(None),
-            };
-            Ok(Some(token))
+            match char {
+                '{' => Ok(self.read_char_and_token(Token::LeftBrace)),
+                '}' => Ok(self.read_char_and_token(Token::RightBrace)),
+                '[' => Ok(self.read_char_and_token(Token::LeftBracket)),
+                ']' => Ok(self.read_char_and_token(Token::RightBracket)),
+                ':' => Ok(self.read_char_and_token(Token::Colon)),
+                ',' => Ok(self.read_char_and_token(Token::Comma)),
+                'n' => self.read_value("null", Token::Null),
+                't' => self.read_value("true", Token::Bool(true)),
+                'f' => self.read_value("false", Token::Bool(false)),
+                _ => Ok(None),
+            }
         } else {
             Ok(None)
+        }
+    }
+
+    fn read_value(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
+        let cand: String = (0..value.len())
+            .map(|_| self.input.next().unwrap())
+            .collect();
+        if cand == value {
+            Ok(Some(token))
+        } else {
+            Err(LexerError::new(format!(
+                "expected '{}', but got {}",
+                value, cand,
+            )))
+        }
+    }
+
+    fn skip_whitespaces(&mut self) {
+        loop {
+            if let Some(c) = self.input.peek() {
+                if c.is_whitespace() {
+                    self.input.next();
+                    continue;
+                }
+            }
+            break;
         }
     }
 }
@@ -68,6 +104,7 @@ mod tests {
                     let mut l = Lexer::new($token);
                     let actual = l.next_token();
                     assert_eq!(actual, Ok($expected));
+                    assert_eq!(l.input.collect::<String>(), "");
                 }
             )*
         }
@@ -82,5 +119,8 @@ mod tests {
         right_bracket: ("]", Some(Token::RightBracket)),
         colon: (":", Some(Token::Colon)),
         comma: (",", Some(Token::Comma)),
+        null: ("null", Some(Token::Null)),
+        boolean_true: ("true", Some(Token::Bool(true))),
+        // boolean_false: ("false", Some(Token::Bool(false))),
     }
 }
