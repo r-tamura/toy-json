@@ -3,8 +3,9 @@ use std::fmt;
 // https://www.rfc-editor.org/rfc/rfc4627#section-2
 #[derive(Debug, PartialEq)]
 pub enum Token {
-    Null,         // null
-    Bool(bool),   // true or false
+    Null,       // null
+    Bool(bool), // true or false
+    Number(f64),
     LeftBrace,    // '{'
     RightBrace,   // '}'
     LeftBracket,  // '['
@@ -24,7 +25,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_char_and_token(&mut self, token: Token) -> Option<Token> {
+    fn read_char_and_return_token(&mut self, token: Token) -> Option<Token> {
         self.input.next();
         Some(token)
     }
@@ -33,15 +34,16 @@ impl<'a> Lexer<'a> {
         self.skip_whitespaces();
         if let Some(char) = self.input.peek() {
             match char {
-                '{' => Ok(self.read_char_and_token(Token::LeftBrace)),
-                '}' => Ok(self.read_char_and_token(Token::RightBrace)),
-                '[' => Ok(self.read_char_and_token(Token::LeftBracket)),
-                ']' => Ok(self.read_char_and_token(Token::RightBracket)),
-                ':' => Ok(self.read_char_and_token(Token::Colon)),
-                ',' => Ok(self.read_char_and_token(Token::Comma)),
+                '{' => Ok(self.read_char_and_return_token(Token::LeftBrace)),
+                '}' => Ok(self.read_char_and_return_token(Token::RightBrace)),
+                '[' => Ok(self.read_char_and_return_token(Token::LeftBracket)),
+                ']' => Ok(self.read_char_and_return_token(Token::RightBracket)),
+                ':' => Ok(self.read_char_and_return_token(Token::Colon)),
+                ',' => Ok(self.read_char_and_return_token(Token::Comma)),
                 'n' => self.read_value("null", Token::Null),
                 't' => self.read_value("true", Token::Bool(true)),
                 'f' => self.read_value("false", Token::Bool(false)),
+                '-' | '0'..='9' => self.read_number(),
                 _ => Ok(None),
             }
         } else {
@@ -50,9 +52,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_value(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
-        let cand: String = (0..value.len())
-            .map(|_| self.input.next().unwrap())
-            .collect();
+        let cand: String = (0..value.len()).filter_map(|_| self.input.next()).collect();
         if cand == value {
             Ok(Some(token))
         } else {
@@ -60,6 +60,33 @@ impl<'a> Lexer<'a> {
                 "expected '{}', but got {}",
                 value, cand,
             )))
+        }
+    }
+
+    fn read_number(&mut self) -> Result<Option<Token>, LexerError> {
+        let mut cand: String = String::new();
+        loop {
+            if let Some(c) = self.input.peek() {
+                const MINUS: char = '-';
+                const PLUS: char = '+';
+                const DECIMAL_POINT: char = '.';
+                const EXP_LOWERCASE: char = 'e';
+                const EXP_UPPERCASE: char = 'E';
+                const SYMBOLS: [char; 5] =
+                    [MINUS, PLUS, DECIMAL_POINT, EXP_UPPERCASE, EXP_LOWERCASE];
+
+                if '0' <= (*c) && (*c <= '9') || SYMBOLS.contains(c) {
+                    // We has already check if the nest char exists
+                    cand.push(self.input.next().unwrap());
+                    continue;
+                }
+            }
+            break;
+        }
+        if let Ok(n) = cand.parse::<f64>() {
+            Ok(Some(Token::Number(n)))
+        } else {
+            Err(LexerError::new(format!("couldn't parse number '{}'", cand)))
         }
     }
 
@@ -103,7 +130,7 @@ mod tests {
                 fn $name() {
                     let mut l = Lexer::new($token);
                     let actual = l.next_token();
-                    assert_eq!(actual, Ok($expected));
+                    assert_eq!(actual, $expected);
                     assert_eq!(l.input.collect::<String>(), "");
                 }
             )*
@@ -111,16 +138,22 @@ mod tests {
     }
 
     test_next_token! {
-        empty_string: ("", None),
-        white_space: (" ", None),
-        left_brace: ("{", Some(Token::LeftBrace)),
-        right_brace: ("}", Some(Token::RightBrace)),
-        left_bracket: ("[", Some(Token::LeftBracket)),
-        right_bracket: ("]", Some(Token::RightBracket)),
-        colon: (":", Some(Token::Colon)),
-        comma: (",", Some(Token::Comma)),
-        null: ("null", Some(Token::Null)),
-        boolean_true: ("true", Some(Token::Bool(true))),
-        // boolean_false: ("false", Some(Token::Bool(false))),
+        empty_string: ("", Ok(None)),
+        white_space: (" ", Ok(None)),
+        left_brace: ("{", Ok(Some(Token::LeftBrace))),
+        right_brace: ("}", Ok(Some(Token::RightBrace))),
+        left_bracket: ("[", Ok(Some(Token::LeftBracket))),
+        right_bracket: ("]", Ok(Some(Token::RightBracket))),
+        colon: (":", Ok(Some(Token::Colon))),
+        comma: (",", Ok(Some(Token::Comma))),
+        null: ("null", Ok(Some(Token::Null))),
+        boolean_tru_error: ("tru", Err(LexerError::new("expected 'true', but got tru"))),
+        boolean_true: ("true", Ok(Some(Token::Bool(true)))),
+        boolean_false: ("false", Ok(Some(Token::Bool(false)))),
+        number_integer: ("42", Ok(Some(Token::Number(42f64)))),
+        number_float: ("3.14", Ok(Some(Token::Number(3.14)))),
+        number_minus: ("-2.85", Ok(Some(Token::Number(-2.85)))),
+        number_exp_lowercase: ("2.5e3", Ok(Some(Token::Number(2.5e3)))),
+        number_exp_uppercase: ("2.5E3", Ok(Some(Token::Number(2.5e3)))),
     }
 }
