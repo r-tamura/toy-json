@@ -3,9 +3,10 @@ use std::fmt;
 // https://www.rfc-editor.org/rfc/rfc4627#section-2
 #[derive(Debug, PartialEq)]
 pub enum Token {
-    Null,       // null
-    Bool(bool), // true or false
-    Number(f64),
+    Null,        // null
+    Bool(bool),  // true or false
+    Number(f64), // 42, 3.14, 10e3 ...
+    String(String),
     LeftBrace,    // '{'
     RightBrace,   // '}'
     LeftBracket,  // '['
@@ -26,6 +27,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_char_and_return_token(&mut self, token: Token) -> Option<Token> {
+        assert!(self.input.peek().is_some());
         self.input.next();
         Some(token)
     }
@@ -44,6 +46,7 @@ impl<'a> Lexer<'a> {
                 't' => self.read_value("true", Token::Bool(true)),
                 'f' => self.read_value("false", Token::Bool(false)),
                 '-' | '0'..='9' => self.read_number(),
+                '"' => self.read_string(),
                 _ => Ok(None),
             }
         } else {
@@ -52,7 +55,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_value(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
-        let cand: String = (0..value.len()).filter_map(|_| self.input.next()).collect();
+        let cand = self.read_next_chars(value.len());
         if cand == value {
             Ok(Some(token))
         } else {
@@ -88,6 +91,62 @@ impl<'a> Lexer<'a> {
         } else {
             Err(LexerError::new(format!("couldn't parse number '{}'", cand)))
         }
+    }
+
+    fn read_string(&mut self) -> Result<Option<Token>, LexerError> {
+        // https://www.rfc-editor.org/rfc/rfc8259#section-7
+        assert!(
+            self.input.peek().unwrap() == &'"',
+            "start double quote of a string"
+        );
+        self.input.next();
+        let mut cand = String::new();
+
+        while let Some(c) = self.input.next_if(|&c| c != '"') {
+            if c == '\\' {
+                let next_char = self
+                    .input
+                    .next()
+                    .ok_or(LexerError::new(format!("unexpected escaped char")))?;
+                match next_char {
+                    // 4HEXDIG ex: \u005C
+                    'u' => cand.push(self.read_unicode()?),
+                    'b' => cand.push('\u{000B}'), // backspace
+                    'f' => cand.push('\u{000C}'), // formfeed
+                    'n' => cand.push('\n'),
+                    'r' => cand.push('\r'),
+                    't' => cand.push('\t'),
+                    '\\' => cand.push('\\'),
+                    _ => return Err(LexerError::new(format!("unexcepted escaped char"))),
+                }
+            } else {
+                cand.push(c);
+            }
+        }
+
+        assert!(
+            self.input.peek().unwrap() == &'"',
+            "end double quote of a string"
+        );
+        self.input.next();
+        Ok(Some(Token::String(cand)))
+    }
+
+    fn read_unicode(&mut self) -> Result<char, LexerError> {
+        let code_point = self.read_next_chars(4);
+        let res = u32::from_str_radix(&code_point, 16).map(|code_point| char::from_u32(code_point));
+        match res {
+            Ok(Some(c)) => Ok(c),
+            Ok(None) => Err(LexerError::new(format!(
+                "'{}' is not a code point",
+                code_point
+            ))),
+            Err(err) => return Err(LexerError::new(format!("{}", err))),
+        }
+    }
+
+    fn read_next_chars(&mut self, n: usize) -> String {
+        (0..n).filter_map(|_| self.input.next()).collect::<String>()
     }
 
     fn skip_whitespaces(&mut self) {
@@ -155,5 +214,16 @@ mod tests {
         number_minus: ("-2.85", Ok(Some(Token::Number(-2.85)))),
         number_exp_lowercase: ("2.5e3", Ok(Some(Token::Number(2.5e3)))),
         number_exp_uppercase: ("2.5E3", Ok(Some(Token::Number(2.5e3)))),
+        string_basic: (r#""hello, world!""#, Ok(Some(Token::String("hello, world!".to_string())))),
+        string_empty: (r#""""#, Ok(Some(Token::String("".to_string())))),
+        string_multibytes: (r#""こんにちは！""#, Ok(Some(Token::String("こんにちは！".to_string())))),
+
+        // > If the character is in the Basic
+        // > Multilingual Plane (U+0000 through U+FFFF), then it may be
+        // > represented as a six-character sequence: a reverse solidus, followed
+        // > by the lowercase letter u
+        string_unicode: (r#""\u005C""#, Ok(Some(Token::String(r#"\"#.to_string())))),
+        string_tab: (r#""\t""#, Ok(Some(Token::String("\t".to_string())))),
+        string_escaped_backslash: (r#""\\""#, Ok(Some(Token::String("\\".to_string())))),
     }
 }
