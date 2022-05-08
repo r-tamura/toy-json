@@ -26,10 +26,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_char_and_return_token(&mut self, token: Token) -> Option<Token> {
-        assert!(self.input.peek().is_some());
-        self.input.next();
-        Some(token)
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexerError> {
+        let mut tokens = Vec::new();
+        while let Some(tok) = self.next_token()? {
+            tokens.push(tok);
+        }
+        Ok(tokens)
     }
 
     pub fn next_token(&mut self) -> Result<Option<Token>, LexerError> {
@@ -42,9 +44,9 @@ impl<'a> Lexer<'a> {
                 ']' => Ok(self.read_char_and_return_token(Token::RightBracket)),
                 ':' => Ok(self.read_char_and_return_token(Token::Colon)),
                 ',' => Ok(self.read_char_and_return_token(Token::Comma)),
-                'n' => self.read_value("null", Token::Null),
-                't' => self.read_value("true", Token::Bool(true)),
-                'f' => self.read_value("false", Token::Bool(false)),
+                'n' => self.read_keyword("null", Token::Null),
+                't' => self.read_keyword("true", Token::Bool(true)),
+                'f' => self.read_keyword("false", Token::Bool(false)),
                 '-' | '0'..='9' => self.read_number(),
                 '"' => self.read_string(),
                 _ => Ok(None),
@@ -54,7 +56,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_value(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
+    fn read_char_and_return_token(&mut self, token: Token) -> Option<Token> {
+        assert!(self.input.peek().is_some());
+        self.input.next();
+        Some(token)
+    }
+
+    fn read_keyword(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
         let cand = self.read_next_chars(value.len());
         if cand == value {
             Ok(Some(token))
@@ -177,7 +185,6 @@ impl fmt::Display for LexerError {
     }
 }
 
-fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +232,62 @@ mod tests {
         string_unicode: (r#""\u005C""#, Ok(Some(Token::String(r#"\"#.to_string())))),
         string_tab: (r#""\t""#, Ok(Some(Token::String("\t".to_string())))),
         string_escaped_backslash: (r#""\\""#, Ok(Some(Token::String("\\".to_string())))),
+    }
+
+    #[test]
+    fn tokenize_json() {
+        let mut l = Lexer::new(
+            r#"{
+            "integer": 42,
+            "null": null,
+            "boolean": false,
+            "array": ["v1", "v2"],
+            "object": {
+                "float": 3.14,
+                "exp": -3e10
+            }
+        }"#,
+        );
+
+        let tokens = l.tokenize().unwrap();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::LeftBrace,
+                Token::String("integer".to_string()),
+                Token::Colon,
+                Token::Number(42f64),
+                Token::Comma,
+                Token::String("null".to_string()),
+                Token::Colon,
+                Token::Null,
+                Token::Comma,
+                Token::String("boolean".to_string()),
+                Token::Colon,
+                Token::Bool(false),
+                Token::Comma,
+                Token::String("array".to_string()),
+                Token::Colon,
+                Token::LeftBracket,
+                Token::String("v1".to_string()),
+                Token::Comma,
+                Token::String("v2".to_string()),
+                Token::RightBracket,
+                Token::Comma,
+                Token::String("object".to_string()),
+                Token::Colon,
+                Token::LeftBrace,
+                Token::String("float".to_string()),
+                Token::Colon,
+                Token::Number(3.14),
+                Token::Comma,
+                Token::String("exp".to_string()),
+                Token::Colon,
+                Token::Number(-3E10),
+                Token::RightBrace,
+                Token::RightBrace,
+            ]
+        )
     }
 }
