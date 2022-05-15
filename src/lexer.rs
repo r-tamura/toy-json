@@ -1,4 +1,6 @@
-use std::fmt;
+use std::fmt::{self, Debug};
+
+type Result<T> = std::result::Result<T, LexerError>;
 
 // https://www.rfc-editor.org/rfc/rfc4627#section-2
 #[derive(Debug, PartialEq)]
@@ -15,6 +17,24 @@ pub enum Token {
     Comma,        // ','
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use self::Token::*;
+        match self {
+            Null => write!(f, "{}", "null"),
+            Bool(b) => write!(f, "{}", b),
+            Number(num) => write!(f, "{}", num),
+            String(s) => write!(f, "{}", s),
+            LeftBrace => write!(f, "{}", '{'),
+            RightBrace => write!(f, "{}", '}'),
+            LeftBracket => write!(f, "{}", '['),
+            RightBracket => write!(f, "{}", ']'),
+            Colon => write!(f, "{}", ':'),
+            Comma => write!(f, "{}", ','),
+        }
+    }
+}
+
 pub struct Lexer<'a> {
     input: std::iter::Peekable<std::str::Chars<'a>>,
 }
@@ -26,55 +46,60 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexerError> {
+    pub fn tokenize(&mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
-        while let Some(tok) = self.next_token()? {
-            tokens.push(tok);
+        while let Some(token) = self.next_token() {
+            match token {
+                Ok(tok) => tokens.push(tok),
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         }
         Ok(tokens)
     }
 
-    pub fn next_token(&mut self) -> Result<Option<Token>, LexerError> {
+    pub fn next_token(&mut self) -> Option<Result<Token>> {
         self.skip_whitespaces();
         if let Some(char) = self.input.peek() {
             match char {
-                '{' => Ok(self.read_char_and_return_token(Token::LeftBrace)),
-                '}' => Ok(self.read_char_and_return_token(Token::RightBrace)),
-                '[' => Ok(self.read_char_and_return_token(Token::LeftBracket)),
-                ']' => Ok(self.read_char_and_return_token(Token::RightBracket)),
-                ':' => Ok(self.read_char_and_return_token(Token::Colon)),
-                ',' => Ok(self.read_char_and_return_token(Token::Comma)),
-                'n' => self.read_keyword("null", Token::Null),
-                't' => self.read_keyword("true", Token::Bool(true)),
-                'f' => self.read_keyword("false", Token::Bool(false)),
-                '-' | '0'..='9' => self.read_number(),
-                '"' => self.read_string(),
-                _ => Ok(None),
+                '{' => Some(self.read_char_and_return_token(Token::LeftBrace)),
+                '}' => Some(self.read_char_and_return_token(Token::RightBrace)),
+                '[' => Some(self.read_char_and_return_token(Token::LeftBracket)),
+                ']' => Some(self.read_char_and_return_token(Token::RightBracket)),
+                ':' => Some(self.read_char_and_return_token(Token::Colon)),
+                ',' => Some(self.read_char_and_return_token(Token::Comma)),
+                'n' => Some(self.read_keyword("null", Token::Null)),
+                't' => Some(self.read_keyword("true", Token::Bool(true))),
+                'f' => Some(self.read_keyword("false", Token::Bool(false))),
+                '-' | '0'..='9' => Some(self.read_number()),
+                '"' => Some(self.read_string()),
+                _ => Some(Err(LexerError::Common("lexer error".into()))),
             }
         } else {
-            Ok(None)
+            None
         }
     }
 
-    fn read_char_and_return_token(&mut self, token: Token) -> Option<Token> {
+    fn read_char_and_return_token(&mut self, token: Token) -> Result<Token> {
         assert!(self.input.peek().is_some());
         self.input.next();
-        Some(token)
+        Ok(token)
     }
 
-    fn read_keyword(&mut self, value: &str, token: Token) -> Result<Option<Token>, LexerError> {
+    fn read_keyword(&mut self, value: &str, token: Token) -> Result<Token> {
         let cand = self.read_next_chars(value.len());
         if cand == value {
-            Ok(Some(token))
+            Ok(token)
         } else {
-            Err(LexerError::new(format!(
+            Err(LexerError::Common(format!(
                 "expected '{}', but got {}",
                 value, cand,
             )))
         }
     }
 
-    fn read_number(&mut self) -> Result<Option<Token>, LexerError> {
+    fn read_number(&mut self) -> Result<Token> {
         let mut cand: String = String::new();
         loop {
             if let Some(c) = self.input.peek() {
@@ -95,13 +120,16 @@ impl<'a> Lexer<'a> {
             break;
         }
         if let Ok(n) = cand.parse::<f64>() {
-            Ok(Some(Token::Number(n)))
+            Ok(Token::Number(n))
         } else {
-            Err(LexerError::new(format!("couldn't parse number '{}'", cand)))
+            Err(LexerError::Common(format!(
+                "couldn't parse number '{}'",
+                cand
+            )))
         }
     }
 
-    fn read_string(&mut self) -> Result<Option<Token>, LexerError> {
+    fn read_string(&mut self) -> Result<Token> {
         // https://www.rfc-editor.org/rfc/rfc8259#section-7
         assert!(
             self.input.peek().unwrap() == &'"',
@@ -115,7 +143,7 @@ impl<'a> Lexer<'a> {
                 let next_char = self
                     .input
                     .next()
-                    .ok_or(LexerError::new(format!("unexpected escaped char")))?;
+                    .ok_or(LexerError::UnexpectedEscapedCharacter)?;
                 match next_char {
                     // 4HEXDIG ex: \u005C
                     'u' => cand.push(self.read_unicode()?),
@@ -125,7 +153,7 @@ impl<'a> Lexer<'a> {
                     'r' => cand.push('\r'),
                     't' => cand.push('\t'),
                     '\\' => cand.push('\\'),
-                    _ => return Err(LexerError::new(format!("unexcepted escaped char"))),
+                    _ => return Err(LexerError::UnexpectedEscapedCharacter),
                 }
             } else {
                 cand.push(c);
@@ -137,19 +165,19 @@ impl<'a> Lexer<'a> {
             "end double quote of a string"
         );
         self.input.next();
-        Ok(Some(Token::String(cand)))
+        Ok(Token::String(cand))
     }
 
-    fn read_unicode(&mut self) -> Result<char, LexerError> {
+    fn read_unicode(&mut self) -> Result<char> {
         let code_point = self.read_next_chars(4);
         let res = u32::from_str_radix(&code_point, 16).map(|code_point| char::from_u32(code_point));
         match res {
             Ok(Some(c)) => Ok(c),
-            Ok(None) => Err(LexerError::new(format!(
+            Ok(None) => Err(LexerError::Common(format!(
                 "'{}' is not a code point",
                 code_point
             ))),
-            Err(err) => return Err(LexerError::new(format!("{}", err))),
+            Err(err) => return Err(LexerError::Common(format!("{}", err))),
         }
     }
 
@@ -170,18 +198,32 @@ impl<'a> Lexer<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct LexerError(String);
-
-impl LexerError {
-    pub fn new(message: impl Into<String>) -> Self {
-        LexerError(message.into())
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Result<Token>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token()
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LexerError {
+    Common(String),
+    Number,
+    String,
+    Bool,
+    Null,
+    UnexpectedEscapedCharacter,
+    NotCodePoint(char),
 }
 
 impl fmt::Display for LexerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Lexer error: {}", self.0)
+        use self::LexerError::*;
+        match self {
+            Common(msg) => write!(f, "{}", msg),
+            UnexpectedEscapedCharacter => write!(f, "unexcepted escaped char"),
+            e => write!(f, "{}", e),
+        }
     }
 }
 
@@ -204,34 +246,34 @@ mod tests {
     }
 
     test_next_token! {
-        empty_string: ("", Ok(None)),
-        white_space: (" ", Ok(None)),
-        left_brace: ("{", Ok(Some(Token::LeftBrace))),
-        right_brace: ("}", Ok(Some(Token::RightBrace))),
-        left_bracket: ("[", Ok(Some(Token::LeftBracket))),
-        right_bracket: ("]", Ok(Some(Token::RightBracket))),
-        colon: (":", Ok(Some(Token::Colon))),
-        comma: (",", Ok(Some(Token::Comma))),
-        null: ("null", Ok(Some(Token::Null))),
-        boolean_tru_error: ("tru", Err(LexerError::new("expected 'true', but got tru"))),
-        boolean_true: ("true", Ok(Some(Token::Bool(true)))),
-        boolean_false: ("false", Ok(Some(Token::Bool(false)))),
-        number_integer: ("42", Ok(Some(Token::Number(42f64)))),
-        number_float: ("3.14", Ok(Some(Token::Number(3.14)))),
-        number_minus: ("-2.85", Ok(Some(Token::Number(-2.85)))),
-        number_exp_lowercase: ("2.5e3", Ok(Some(Token::Number(2.5e3)))),
-        number_exp_uppercase: ("2.5E3", Ok(Some(Token::Number(2.5e3)))),
-        string_basic: (r#""hello, world!""#, Ok(Some(Token::String("hello, world!".to_string())))),
-        string_empty: (r#""""#, Ok(Some(Token::String("".to_string())))),
-        string_multibytes: (r#""こんにちは！""#, Ok(Some(Token::String("こんにちは！".to_string())))),
+        empty_string: ("", None),
+        white_space: (" ", None),
+        left_brace: ("{", Some(Ok(Token::LeftBrace))),
+        right_brace: ("}", Some(Ok(Token::RightBrace))),
+        left_bracket: ("[", Some(Ok(Token::LeftBracket))),
+        right_bracket: ("]", Some(Ok(Token::RightBracket))),
+        colon: (":", Some(Ok(Token::Colon))),
+        comma: (",", Some(Ok(Token::Comma))),
+        null: ("null", Some(Ok(Token::Null))),
+        boolean_tru_error: ("tru", Some(Err(LexerError::Common("expected 'true', but got tru".into())))),
+        boolean_true: ("true", Some(Ok(Token::Bool(true)))),
+        boolean_false: ("false", Some(Ok(Token::Bool(false)))),
+        number_integer: ("42", Some(Ok(Token::Number(42f64)))),
+        number_float: ("3.14", Some(Ok(Token::Number(3.14)))),
+        number_minus: ("-2.85", Some(Ok(Token::Number(-2.85)))),
+        number_exp_lowercase: ("2.5e3", Some(Ok(Token::Number(2.5e3)))),
+        number_exp_uppercase: ("2.5E3", Some(Ok(Token::Number(2.5e3)))),
+        string_basic: (r#""hello, world!""#, Some(Ok(Token::String("hello, world!".to_string())))),
+        string_empty: (r#""""#, Some(Ok(Token::String("".to_string())))),
+        string_multibytes: (r#""こんにちは！""#, Some(Ok(Token::String("こんにちは！".to_string())))),
 
         // > If the character is in the Basic
         // > Multilingual Plane (U+0000 through U+FFFF), then it may be
         // > represented as a six-character sequence: a reverse solidus, followed
         // > by the lowercase letter u
-        string_unicode: (r#""\u005C""#, Ok(Some(Token::String(r#"\"#.to_string())))),
-        string_tab: (r#""\t""#, Ok(Some(Token::String("\t".to_string())))),
-        string_escaped_backslash: (r#""\\""#, Ok(Some(Token::String("\\".to_string())))),
+        string_unicode: (r#""\u005C""#, Some(Ok(Token::String(r#"\"#.to_string())))),
+        string_tab: (r#""\t""#, Some(Ok(Token::String("\t".to_string())))),
+        string_escaped_backslash: (r#""\\""#, Some(Ok(Token::String("\\".to_string())))),
     }
 
     #[test]
