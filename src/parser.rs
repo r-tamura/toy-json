@@ -12,7 +12,7 @@ pub enum ParserError {
     NoTokenFound,
     UnexpectedToken(Token, Token),
     Syntax(Token),
-    Unknown,
+    Unknown(Token),
 }
 
 impl From<lexer::LexerError> for ParserError {
@@ -31,7 +31,7 @@ impl fmt::Display for ParserError {
                 write!(f, "token '{}' is expected, but got '{}'", expected, actual)
             }
             Syntax(_) => write!(f, "Syntax error"),
-            _ => write!(f, "unknown error"),
+            Unknown(t) => write!(f, "Unknown token: {}", t),
         }
     }
 }
@@ -56,7 +56,8 @@ impl<'a> Parser<'a> {
             Ok(Token::Bool(false)) => Ok(ast::Value::Bool(false)),
             Ok(Token::Bool(true)) => Ok(ast::Value::Bool(true)),
             Ok(Token::Null) => Ok(ast::Value::Null),
-            _ => Err(ParserError::Unknown),
+            Ok(token) => Err(ParserError::Unknown(token)),
+            Err(e) => Err(From::from(e)),
         })
     }
 
@@ -76,6 +77,11 @@ impl<'a> Parser<'a> {
             elements.push(e);
         }
 
+        let token = self.expect_next();
+        if token != Token::RightBracket {
+            return Err(ParserError::UnexpectedToken(token, Token::RightBracket));
+        }
+
         Ok(ast::Value::Array(elements))
     }
 
@@ -91,10 +97,17 @@ impl<'a> Parser<'a> {
             pairs.push(self.parse_key_value()?);
         }
 
+        let token = self.expect_next();
+        if token != Token::RightBrace {
+            return Err(ParserError::UnexpectedToken(token, Token::RightBrace));
+        }
+
         Ok(ast::Value::Object(pairs))
     }
 
     fn parse_key_value(&mut self) -> Result<(String, ast::Value)> {
+        // {"key": "value"}
+        // ^--------------
         let token = self.next_token()?;
         let key = match token {
             Token::String(s) => Ok(s),
@@ -104,11 +117,10 @@ impl<'a> Parser<'a> {
             )),
         }?;
 
-        if !self.peek_token_is(Token::Colon) {
-            let actual = self.expect_next();
-            return Err(ParserError::UnexpectedToken(Token::Colon, actual));
+        let colon = self.expect_next();
+        if colon != Token::Colon {
+            return Err(ParserError::UnexpectedToken(Token::Colon, colon));
         }
-        self.expect_next();
 
         let value = self.parse().unwrap()?;
 
@@ -140,13 +152,17 @@ impl<'a> Parser<'a> {
     /// 次のトークンが確実に存在する状態で、次のトークンを読み込みます
     /// 次のトークンが存在しない, もしくは, 無効なトークンの場合はpanicを発生させます
     fn expect_next(&mut self) -> Token {
-        self.lex
+        let token = self
+            .lex
             .next()
             .expect("there should be a token")
-            .expect("token should be valid")
+            .expect("token should be valid");
+
+        token
     }
 }
 
+#[allow(non_snake_case)]
 #[cfg(test)]
 mod tests {
     use self::ast::*;
@@ -228,15 +244,35 @@ mod tests {
         );
     }
 
-    fn parse_object_nested() {
-        let actual = parse(r#"{"a": {"b": 2}, "w": {"x": {"y": {"z": null}}}}"#);
+    #[test]
+    fn Object内にObjectの後にキーが続くとき() {
+        let actual = parse(r#"{"a": {"b": 2}, "w": true}"#);
         assert_eq!(
             actual,
             Value::Object(vec![
-                ("name".into(), Value::String("Mr.X".into())),
-                ("age".into(), Value::Number(35f64)),
-                ("hasCar".into(), Value::Bool(true)),
-                ("education".into(), Value::Null),
+                (
+                    "a".into(),
+                    Value::Object(vec![("b".into(), Value::Number(2.0))])
+                ),
+                ("w".into(), Value::Bool(true),),
+            ])
+        );
+    }
+
+    #[test]
+    fn Object内にArrayの後にキーが続くとき() {
+        let actual = parse(r#"{"a": [[1], [2]], "b": true}"#);
+        assert_eq!(
+            actual,
+            Value::Object(vec![
+                (
+                    "a".into(),
+                    Value::Array(vec![
+                        Value::Array(vec![Value::Number(1.0f64)]),
+                        Value::Array(vec![Value::Number(2.0f64)])
+                    ])
+                ),
+                ("b".into(), Value::Bool(true),),
             ])
         );
     }
@@ -244,8 +280,7 @@ mod tests {
     fn parse<'a>(input: &'a str) -> ast::Value {
         let mut l = lexer::Lexer::new(input);
         let mut p = Parser::new(&mut l);
-        let actual = p.parse().unwrap().unwrap();
-        actual
+        p.parse().unwrap().expect("[test] must be Ok")
     }
 }
 

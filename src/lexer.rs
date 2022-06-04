@@ -83,7 +83,7 @@ impl<'a> Lexer<'a> {
 
     fn read_char_and_return_token(&mut self, token: Token) -> Result<Token> {
         assert!(self.input.peek().is_some());
-        self.input.next();
+        let _ = self.input.next();
         Ok(token)
     }
 
