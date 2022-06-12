@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     env, io,
     io::{Read, Write},
@@ -5,6 +6,26 @@ use std::{
 };
 
 use toy_json::{ast, parse};
+
+fn ansi_color(s: impl fmt::Display, c: u32) -> String {
+    format!("\x1b[{}m{}\x1b[0m", c, s)
+}
+
+fn red(s: impl fmt::Display) -> String {
+    ansi_color(s, 31)
+}
+
+fn green(s: impl fmt::Display) -> String {
+    ansi_color(s, 32)
+}
+
+fn yellow(s: impl fmt::Display) -> String {
+    ansi_color(s, 33)
+}
+
+fn blue(s: impl fmt::Display) -> String {
+    ansi_color(s, 34)
+}
 
 fn usage() {
     eprintln!("tj - commandline JSON processor\n");
@@ -21,9 +42,15 @@ fn print_value(
     let indent = options.spaces * level;
     match value {
         Number(n) => write!(buf, "{}", n)?,
-        Bool(b) => write!(buf, "{}", b)?,
-        String(s) => write!(buf, r#""{}""#, s)?,
-        Null => write!(buf, "null")?,
+        Bool(b) => {
+            if *b {
+                write!(buf, "{}", yellow(b))?
+            } else {
+                write!(buf, "{}", blue(b))?
+            }
+        }
+        String(s) => write!(buf, r#""{}""#, green(s))?,
+        Null => write!(buf, "{}", red("null"))?,
         Array(items) => {
             write!(buf, "[")?;
             if !options.compact {
@@ -34,7 +61,7 @@ fn print_value(
                 if !options.compact {
                     write!(buf, "{}", " ".repeat(indent + options.spaces))?;
                 }
-                print_value(element, buf, level+1, options)?;
+                print_value(element, buf, level + 1, options)?;
                 if i != last_index {
                     write!(buf, ",")?;
                 }
@@ -58,12 +85,17 @@ fn print_value(
                 if !options.compact {
                     write!(buf, "{}", spaces)?;
                 }
+                let key = if options.monochrome {
+                    key.to_string()
+                } else {
+                    blue(key.as_str())
+                };
                 write!(buf, r#""{}""#, key)?;
                 write!(buf, ":")?;
                 if !options.compact {
                     write!(buf, " ")?;
                 }
-                print_value(value, buf, level+1, options)?;
+                print_value(value, buf, level + 1, options)?;
 
                 if i != last_index {
                     write!(buf, ",")?;
@@ -98,13 +130,15 @@ struct Options {
 impl Options {
     fn new(compact: bool, monochrome: bool) -> Self {
         Options {
-            compact,  monochrome, spaces: 2
+            compact,
+            monochrome,
+            spaces: 2,
         }
     }
 }
 
 fn main() {
-    let (flags, args): (Vec<String>, Vec<String>) = env::args()
+    let (flags, _args): (Vec<String>, Vec<String>) = env::args()
         .into_iter()
         .skip(1)
         .partition(|arg| arg.starts_with('-'));
@@ -138,7 +172,11 @@ fn main() {
             usage();
             exit(1);
         }
-        Some(Err(e)) => eprintln!("{}", e),
+        Some(Err(e)) => {
+            usage();
+            eprintln!("{}", e);
+            exit(1);
+        }
         Some(Ok(value)) => {
             print_json(value, options).unwrap();
         }

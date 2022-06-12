@@ -2,7 +2,7 @@
 
 ## TODO
 
-- [] pretty print
-- [] colorize
+- [x] pretty print
+- [x] colorize
 - [] wasm
 - [] unicode
