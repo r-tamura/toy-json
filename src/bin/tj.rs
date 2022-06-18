@@ -43,18 +43,34 @@ fn print_value(
     match value {
         Number(n) => write!(buf, "{}", n)?,
         Bool(b) => {
-            if *b {
-                write!(buf, "{}", yellow(b))?
+            if options.monochrome {
+                write!(buf, "{}", b)?;
             } else {
-                write!(buf, "{}", blue(b))?
+                write!(buf, "{}", if *b { yellow(b) } else { blue(b) })?
             }
         }
-        String(s) => write!(buf, r#""{}""#, green(s))?,
-        Null => write!(buf, "{}", red("null"))?,
+        String(s) => write!(
+            buf,
+            r#""{}""#,
+            if options.monochrome {
+                s.to_string()
+            } else {
+                green(s)
+            }
+        )?,
+        Null => write!(
+            buf,
+            "{}",
+            if options.monochrome {
+                "null".to_string()
+            } else {
+                red("null")
+            }
+        )?,
         Array(items) => {
             write!(buf, "[")?;
             if !options.compact {
-                write!(buf, "\n")?;
+                writeln!(buf)?;
             }
             let last_index = items.len() - 1;
             for (i, element) in items.iter().enumerate() {
@@ -66,7 +82,7 @@ fn print_value(
                     write!(buf, ",")?;
                 }
                 if !options.compact {
-                    write!(buf, "\n")?;
+                    writeln!(buf)?;
                 }
             }
             if !options.compact {
@@ -77,7 +93,7 @@ fn print_value(
         Object(items) => {
             write!(buf, "{{")?;
             if !options.compact {
-                write!(buf, "\n")?;
+                writeln!(buf)?;
             }
             let last_index = items.len() - 1;
             let spaces = " ".repeat(indent + (options.spaces));
@@ -85,12 +101,15 @@ fn print_value(
                 if !options.compact {
                     write!(buf, "{}", spaces)?;
                 }
-                let key = if options.monochrome {
-                    key.to_string()
-                } else {
-                    blue(key.as_str())
-                };
-                write!(buf, r#""{}""#, key)?;
+                write!(
+                    buf,
+                    r#""{}""#,
+                    if options.monochrome {
+                        key.to_string()
+                    } else {
+                        blue(key)
+                    }
+                )?;
                 write!(buf, ":")?;
                 if !options.compact {
                     write!(buf, " ")?;
@@ -101,7 +120,7 @@ fn print_value(
                     write!(buf, ",")?;
                 }
                 if !options.compact {
-                    write!(buf, "\n")?;
+                    writeln!(buf)?;
                 }
             }
             if !options.compact {
@@ -117,7 +136,7 @@ fn print_json(value: ast::Value, options: Options) -> Result<(), Box<dyn std::er
     let mut buf = io::BufWriter::new(std::io::stdout());
     // match value {}
     print_value(&value, &mut buf, 0, &options)?;
-    write!(buf, "\n")?;
+    writeln!(buf)?;
     Ok(())
 }
 

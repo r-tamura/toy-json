@@ -21,16 +21,16 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Token::*;
         match self {
-            Null => write!(f, "{}", "null"),
+            Null => write!(f, "null"),
             Bool(b) => write!(f, "{}", b),
             Number(num) => write!(f, "{}", num),
             String(s) => write!(f, "{}", s),
-            LeftBrace => write!(f, "{}", '{'),
-            RightBrace => write!(f, "{}", '}'),
-            LeftBracket => write!(f, "{}", '['),
-            RightBracket => write!(f, "{}", ']'),
-            Colon => write!(f, "{}", ':'),
-            Comma => write!(f, "{}", ','),
+            LeftBrace => write!(f, "{{"),
+            RightBrace => write!(f, "}}"),
+            LeftBracket => write!(f, "["),
+            RightBracket => write!(f, "]"),
+            Colon => write!(f, ":"),
+            Comma => write!(f, ","),
         }
     }
 }
@@ -170,7 +170,7 @@ impl<'a> Lexer<'a> {
 
     fn read_unicode(&mut self) -> Result<char> {
         let code_point = self.read_next_chars(4);
-        let res = u32::from_str_radix(&code_point, 16).map(|code_point| char::from_u32(code_point));
+        let res = u32::from_str_radix(&code_point, 16).map(char::from_u32);
         match res {
             Ok(Some(c)) => Ok(c),
             Ok(None) => Err(LexerError::Common(format!(
@@ -259,7 +259,8 @@ mod tests {
         boolean_true: ("true", Some(Ok(Token::Bool(true)))),
         boolean_false: ("false", Some(Ok(Token::Bool(false)))),
         number_integer: ("42", Some(Ok(Token::Number(42f64)))),
-        number_float: ("3.14", Some(Ok(Token::Number(3.14)))),
+
+        number_float: ("3.14", Some(Ok(Token::Number(#[allow(clippy::approx_constant)]3.14)))),
         number_minus: ("-2.85", Some(Ok(Token::Number(-2.85)))),
         number_exp_lowercase: ("2.5e3", Some(Ok(Token::Number(2.5e3)))),
         number_exp_uppercase: ("2.5E3", Some(Ok(Token::Number(2.5e3)))),
@@ -322,6 +323,7 @@ mod tests {
                 Token::LeftBrace,
                 Token::String("float".to_string()),
                 Token::Colon,
+                #[allow(clippy::approx_constant)]
                 Token::Number(3.14),
                 Token::Comma,
                 Token::String("exp".to_string()),
@@ -330,6 +332,53 @@ mod tests {
                 Token::RightBrace,
                 Token::RightBrace,
             ]
+        )
+    }
+
+    #[test]
+    fn フォーマットが崩れているとき() {
+        let mut l = Lexer::new(
+            r#"{"Hello, Wasm!": true, "list"
+    : [1,
+      2,
+  3], "object": {
+          "prop1":
+    "v1", "prop2": "v2"
+
+}}"#,
+        );
+        let tokens = l.tokenize().unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::LeftBrace,
+                Token::String("Hello, Wasm!".to_string()),
+                Token::Colon,
+                Token::Bool(true),
+                Token::Comma,
+                Token::String("list".to_string()),
+                Token::Colon,
+                Token::LeftBracket,
+                Token::Number(1f64),
+                Token::Comma,
+                Token::Number(2f64),
+                Token::Comma,
+                Token::Number(3f64),
+                Token::RightBracket,
+                Token::Comma,
+                Token::String("object".to_string()),
+                Token::Colon,
+                Token::LeftBrace,
+                Token::String("prop1".to_string()),
+                Token::Colon,
+                Token::String("v1".to_string()),
+                Token::Comma,
+                Token::String("prop2".to_string()),
+                Token::Colon,
+                Token::String("v2".to_string()),
+                Token::RightBrace,
+                Token::RightBrace,
+            ],
         )
     }
 }

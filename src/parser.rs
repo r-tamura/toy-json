@@ -106,8 +106,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_key_value(&mut self) -> Result<(String, ast::Value)> {
-        // {"key": "value"}
-        // ^--------------
         let token = self.next_token()?;
         let key = match token {
             Token::String(s) => Ok(s),
@@ -277,7 +275,43 @@ mod tests {
         );
     }
 
-    fn parse<'a>(input: &'a str) -> ast::Value {
+    #[test]
+    fn フォーマットが崩れているとき() {
+        let actual = parse(
+            r#"{"Hello, Wasm!": true, "list"
+    : [1,
+      2,
+
+  3], "object": {
+          "prop1":
+    "v1", "prop2": "v2"
+
+}}"#,
+        );
+        assert_eq!(
+            actual,
+            Value::Object(vec![
+                ("Hello, Wasm!".into(), Value::Bool(true),),
+                (
+                    "list".into(),
+                    Value::Array(vec![
+                        Value::Number(1f64),
+                        Value::Number(2f64),
+                        Value::Number(3f64)
+                    ]),
+                ),
+                (
+                    "object".into(),
+                    Value::Object(vec![
+                        ("prop1".into(), Value::String("v1".into())),
+                        ("prop2".into(), Value::String("v2".into())),
+                    ])
+                )
+            ])
+        );
+    }
+
+    fn parse(input: &str) -> ast::Value {
         let mut l = lexer::Lexer::new(input);
         let mut p = Parser::new(&mut l);
         p.parse().unwrap().expect("[test] must be Ok")
