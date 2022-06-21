@@ -13,9 +13,9 @@ pub enum Value {
 }
 
 pub struct DumpOptions {
-    color: bool,
-    pretty_print: bool,
-    indent: usize,
+    pub color: bool,
+    pub pretty_print: bool,
+    pub indent: usize,
 }
 
 impl DumpOptions {
