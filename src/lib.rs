@@ -1,3 +1,4 @@
+mod ansi_color;
 pub mod ast;
 pub mod lexer;
 pub mod parser;

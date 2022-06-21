@@ -1,149 +1,22 @@
-use core::fmt;
-use std::{
-    env, io,
-    io::{Read, Write},
-    process::exit,
-};
+use std::{env, io, io::Read, process::exit};
 
 use toy_json::{ast, parse};
-
-fn ansi_color(s: impl fmt::Display, c: u32) -> String {
-    format!("\x1b[{}m{}\x1b[0m", c, s)
-}
-
-fn red(s: impl fmt::Display) -> String {
-    ansi_color(s, 31)
-}
-
-fn green(s: impl fmt::Display) -> String {
-    ansi_color(s, 32)
-}
-
-fn yellow(s: impl fmt::Display) -> String {
-    ansi_color(s, 33)
-}
-
-fn blue(s: impl fmt::Display) -> String {
-    ansi_color(s, 34)
-}
 
 fn usage() {
     eprintln!("tj - commandline JSON processor\n");
     eprintln!(r#"usage: echo '{{"prop": "value"}}' | tj [options]"#)
 }
 
-fn print_value(
-    value: &ast::Value,
-    buf: &mut io::BufWriter<std::io::Stdout>,
-    level: usize,
-    options: &Options,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use ast::Value::*;
-    let indent = options.spaces * level;
-    match value {
-        Number(n) => write!(buf, "{}", n)?,
-        Bool(b) => {
-            if options.monochrome {
-                write!(buf, "{}", b)?;
-            } else {
-                write!(buf, "{}", if *b { yellow(b) } else { blue(b) })?
-            }
-        }
-        String(s) => write!(
-            buf,
-            r#""{}""#,
-            if options.monochrome {
-                s.to_string()
-            } else {
-                green(s)
-            }
-        )?,
-        Null => write!(
-            buf,
-            "{}",
-            if options.monochrome {
-                "null".to_string()
-            } else {
-                red("null")
-            }
-        )?,
-        Array(items) => {
-            write!(buf, "[")?;
-            if !options.compact {
-                writeln!(buf)?;
-            }
-            let last_index = items.len() - 1;
-            for (i, element) in items.iter().enumerate() {
-                if !options.compact {
-                    write!(buf, "{}", " ".repeat(indent + options.spaces))?;
-                }
-                print_value(element, buf, level + 1, options)?;
-                if i != last_index {
-                    write!(buf, ",")?;
-                }
-                if !options.compact {
-                    writeln!(buf)?;
-                }
-            }
-            if !options.compact {
-                write!(buf, "{}", " ".repeat(indent))?;
-            }
-            write!(buf, "]")?;
-        }
-        Object(items) => {
-            write!(buf, "{{")?;
-            if !options.compact {
-                writeln!(buf)?;
-            }
-            let last_index = items.len() - 1;
-            let spaces = " ".repeat(indent + (options.spaces));
-            for (i, (key, value)) in items.iter().enumerate() {
-                if !options.compact {
-                    write!(buf, "{}", spaces)?;
-                }
-                write!(
-                    buf,
-                    r#""{}""#,
-                    if options.monochrome {
-                        key.to_string()
-                    } else {
-                        blue(key)
-                    }
-                )?;
-                write!(buf, ":")?;
-                if !options.compact {
-                    write!(buf, " ")?;
-                }
-                print_value(value, buf, level + 1, options)?;
-
-                if i != last_index {
-                    write!(buf, ",")?;
-                }
-                if !options.compact {
-                    writeln!(buf)?;
-                }
-            }
-            if !options.compact {
-                write!(buf, "{}", " ".repeat(indent))?;
-            }
-            write!(buf, "}}")?;
-        }
-    };
-    Ok(())
-}
-
-fn print_json(value: ast::Value, options: Options) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buf = io::BufWriter::new(std::io::stdout());
-    // match value {}
-    print_value(&value, &mut buf, 0, &options)?;
-    writeln!(buf)?;
-    Ok(())
-}
-
 struct Options {
     compact: bool,
     monochrome: bool,
     spaces: usize,
+}
+
+impl From<Options> for ast::DumpOptions {
+    fn from(opt: Options) -> Self {
+        ast::DumpOptions::new(!opt.monochrome, !opt.compact, opt.spaces)
+    }
 }
 
 impl Options {
@@ -197,7 +70,11 @@ fn main() {
             exit(1);
         }
         Some(Ok(value)) => {
-            print_json(value, options).unwrap();
+            let mut json_str = value.dump(&From::from(options));
+            if !json_str.ends_with('\n') {
+                json_str.push('\n');
+            }
+            print!("{}", json_str);
         }
     };
 }

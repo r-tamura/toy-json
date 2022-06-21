@@ -127,36 +127,27 @@ impl<'a> Parser<'a> {
 
     fn peek_token_is(&mut self, expected: Token) -> bool {
         let token = self.lex.peek();
-        if let Some(token) = token {
-            if let Ok(token) = token {
-                (*token) == expected
-            } else {
-                false
-            }
-        } else {
-            false
+        match token {
+            Some(Ok(token)) => (*token) == expected,
+            _ => false,
         }
     }
 
     fn next_token(&mut self) -> Result<Token> {
         let opts = self.lex.next();
-        if opts.is_none() {
-            Err(ParserError::NoTokenFound)
-        } else {
-            opts.unwrap().map_err(|e| ParserError::Lex(e))
+        match opts {
+            Some(res) => res.map_err(ParserError::Lex),
+            None => Err(ParserError::NoTokenFound),
         }
     }
 
     /// 次のトークンが確実に存在する状態で、次のトークンを読み込みます
     /// 次のトークンが存在しない, もしくは, 無効なトークンの場合はpanicを発生させます
     fn expect_next(&mut self) -> Token {
-        let token = self
-            .lex
+        self.lex
             .next()
             .expect("there should be a token")
-            .expect("token should be valid");
-
-        token
+            .expect("token should be valid")
     }
 }
 
