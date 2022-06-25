@@ -4,5 +4,5 @@
 
 - [x] pretty print
 - [x] colorize
-- [] wasm
+- [x] wasm
 - [] unicode

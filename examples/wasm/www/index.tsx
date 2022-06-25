@@ -2,21 +2,15 @@ import * as React from "react";
 import * as ReactDOM from "react-dom/client";
 import * as toyJson from "toy-json-wasm";
 
-function TextArea() {
-  return (
-    <textarea
-      style={{
-        resize: "horizontal",
-        minWidth: "10rem",
-        width: "20rem",
-        minHeight: "40rem",
-      }}
-    ></textarea>
-  );
+interface Sample {
+  name: string;
+  json: string;
 }
 
-function App() {
-  const [input, setInput] = React.useState(`{"Hello, Wasm!": true, "list"
+const SAMPLES: Record<string, Sample> = {
+  いろいろなデータ型: {
+    name: "いろいろなデータ型",
+    json: `{"Hello, Wasm!": true, "list"
       : [1,
         2,
 
@@ -24,10 +18,31 @@ function App() {
             "prop1":
       "日本語", "prop2": "🎯🌀"
 
-  }}`);
+  }}`,
+  },
+  空オブジェクト: {
+    name: "空オブジェクト",
+    json: "{}",
+  },
+};
+
+function App() {
+  const [sample, setSample] = React.useState(Object.keys(SAMPLES)[0]);
+  const [input, setInput] = React.useState("");
   const [output, setOutput] = React.useState("");
 
+  React.useEffect(() => {
+    console.debug("sample changed:", sample);
+    setInput(SAMPLES[sample].json);
+  }, [sample]);
+
+  function handleSampleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setSample(e.target.value);
+  }
+
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    e.stopPropagation();
     setInput(e.target.value);
   }
 
@@ -37,15 +52,22 @@ function App() {
     try {
       setOutput(toyJson.format(input, 2));
     } catch (err) {
-      setOutput("");
+      setOutput(`Failed to parse JSON:\n ${err}`);
       throw err;
     }
   }
 
   return (
     <div>
-      <h1>Hello, WASM</h1>
+      <h1>toy-json-wasm demo</h1>
       <form onSubmit={handleSubmit}>
+        <select value={sample} onChange={handleSampleChange}>
+          {Object.values(SAMPLES).map(({ name }) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
         <div
           style={{
             display: "flex",
