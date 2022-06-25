@@ -278,6 +278,13 @@ mod tests {
     }
 
     #[test]
+    fn tokennize_empty_object() {
+        let mut l = Lexer::new(r#"{}"#);
+        let actual = l.tokenize().unwrap();
+        assert_eq!(actual, vec![Token::LeftBrace, Token::RightBrace]);
+    }
+
+    #[test]
     fn tokenize_json() {
         let mut l = Lexer::new(
             r#"{
@@ -292,10 +299,10 @@ mod tests {
         }"#,
         );
 
-        let tokens = l.tokenize().unwrap();
+        let actual = l.tokenize().unwrap();
 
         assert_eq!(
-            tokens,
+            actual,
             vec![
                 Token::LeftBrace,
                 Token::String("integer".to_string()),

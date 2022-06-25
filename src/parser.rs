@@ -87,7 +87,7 @@ impl<'a> Parser<'a> {
 
     fn parse_object(&mut self) -> Result<ast::Value> {
         let mut pairs = vec![];
-        if self.peek_token_is(Token::RightBracket) {
+        if self.peek_token_is(Token::RightBrace) {
             return Ok(ast::Value::Object(pairs));
         }
         pairs.push(self.parse_key_value()?);
@@ -211,6 +211,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_empty_object() {
+        let actual = parse(r#"{}"#);
+        assert_eq!(actual, Value::Object(vec![]));
+    }
+
+    #[test]
     fn parse_object_with_single_key_value() {
         let actual = parse(r#"{"key": "value"}"#);
         assert_eq!(
@@ -298,6 +304,19 @@ mod tests {
                         ("prop2".into(), Value::String("v2".into())),
                     ])
                 )
+            ])
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn object_複数の同じキーが含まれているとき() {
+        let actual = parse(r#"{"key1": "value_1_1", "key2": "value2", "key1": "value1_2"}"#);
+        assert_eq!(
+            actual,
+            Value::Object(vec![
+                ("key1".to_string(), Value::String("value_1_2".to_string())),
+                ("key2".to_string(), Value::String("value2".to_string()))
             ])
         );
     }
