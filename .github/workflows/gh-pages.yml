@@ -1,0 +1,37 @@
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v2
+
+      - name: Nodeセットアップ
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - working-directory: examples/wasm/
+        run: wasm-pack build
+
+      - name: 依存モジュールインストール
+        working-directory: examples/wasm/www/
+        run: npm ci
+
+      - name: ビルド
+        working-directory: examples/wasm/www/
+        run: npm run build
+
+      - name: デプロイ
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: examples/wasm/www/dist/
