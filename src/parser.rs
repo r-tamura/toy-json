@@ -94,7 +94,15 @@ impl<'a> Parser<'a> {
 
         while self.peek_token_is(Token::Comma) {
             self.expect_next(); // comsume comma
-            pairs.push(self.parse_key_value()?);
+            let cand = self.parse_key_value()?;
+
+            match pairs.iter().position(|(key, _)| *key == cand.0) {
+                Some(i) => {
+                    pairs.remove(i);
+                    pairs.push(cand);
+                }
+                None => pairs.push(cand),
+            };
         }
 
         let token = self.expect_next();
@@ -309,14 +317,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn object_複数の同じキーが含まれているとき() {
-        let actual = parse(r#"{"key1": "value_1_1", "key2": "value2", "key1": "value1_2"}"#);
+
+    fn object_複数の同じキーが含まれているとき_最後のキーバリューのペアを採用する() {
+        // 使用上は必ずしもユニークである必要がないが、ユニークでない場合の挙動は実装依存になる。多くの実装では最後のキー/バリューのペアを採用している。
+        // https://datatracker.ietf.org/doc/html/rfc8259#section-4
+        // > The names within an object SHOULD be unique.
+        // > Many implementations report the last name/value pair only.
+        let actual = parse(r#"{"key1": "value_1_1", "key2": "value2", "key1": "value_1_2"}"#);
         assert_eq!(
             actual,
             Value::Object(vec![
+                ("key2".to_string(), Value::String("value2".to_string())),
                 ("key1".to_string(), Value::String("value_1_2".to_string())),
-                ("key2".to_string(), Value::String("value2".to_string()))
             ])
         );
     }

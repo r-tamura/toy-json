@@ -173,7 +173,7 @@ impl<'a> Lexer<'a> {
         let res = u32::from_str_radix(&code_point, 16).map(char::from_u32);
         match res {
             Ok(Some(c)) => Ok(c),
-            Ok(None) => Err(LexerError::Common(format!(
+            Ok(None) => Err(LexerError::InvalidUnicode(format!(
                 "'{}' is not a code point",
                 code_point
             ))),
@@ -212,6 +212,7 @@ pub enum LexerError {
     String,
     Bool,
     Null,
+    InvalidUnicode(String),
     UnexpectedEscapedCharacter,
     NotCodePoint(char),
 }
