@@ -1,10 +1,38 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom/client";
 import * as toyJson from "toy-json-wasm";
-
 interface Sample {
   name: string;
   json: string;
+}
+interface Debounced {
+  (): void;
+  cancel: () => void;
+}
+
+function debounce(f: Function, delay: number): Debounced {
+  let timeout: number | null = null;
+  const debounsed = () => {
+    if (timeout !== null) {
+      window.clearInterval(timeout);
+    }
+    window.setTimeout(f, delay);
+  };
+  debounsed.cancel = () => {
+    if (timeout !== null) {
+      window.clearInterval(timeout);
+    }
+  };
+  return debounsed;
+}
+
+function useDebounce(f: Function, delay: number, deps: React.DependencyList) {
+  React.useEffect(() => {
+    const timeout = window.setTimeout(() => f(), delay);
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [delay, ...deps]);
 }
 
 const SAMPLES: Record<string, Sample> = {
@@ -32,7 +60,9 @@ function App() {
   const [output, setOutput] = React.useState("");
 
   React.useEffect(() => {
-    console.debug("sample changed:", sample);
+    if (sample === "custom") {
+      return;
+    }
     setInput(SAMPLES[sample].json);
   }, [sample]);
 
@@ -44,38 +74,60 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     setInput(e.target.value);
+    setSample("custom");
   }
+
+  useDebounce(
+    () => {
+      try {
+        if (input === "") {
+          return "";
+        }
+        setOutput(toyJson.format(input, 2));
+      } catch (err) {
+        setOutput(`Failed to parse JSON:\n ${err}`);
+        // throw err;
+      }
+    },
+    1000,
+    [input, setOutput]
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      setOutput(toyJson.format(input, 2));
-    } catch (err) {
-      setOutput(`Failed to parse JSON:\n ${err}`);
-      throw err;
-    }
   }
 
   return (
-    <div>
+    <main style={{ padding: "0 2rem" }}>
       <h1>toy-json-wasm demo</h1>
       <form onSubmit={handleSubmit}>
-        <select value={sample} onChange={handleSampleChange}>
-          {Object.values(SAMPLES).map(({ name }) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+        <section style={{ display: "flex", gap: "1rem" }}>
+          <div>
+            <label>
+              サンプル:
+              <select value={sample} onChange={handleSampleChange}>
+                <option value="custom" disabled>
+                  custom
+                </option>
+                {Object.values(SAMPLES).map(({ name }) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
         <div
           style={{
-            display: "flex",
-            alignContent: "center",
+            display: "grid",
+            gridTemplateColumns:
+              "minmax(min(100%, 200px), 1fr) minmax(min(100%, 200px), 1fr)",
             margin: "0 auto",
-            width: "900px",
             minHeight: "40rem",
-            gap: "3rem",
+            gap: "1rem",
           }}
         >
           <textarea
@@ -83,20 +135,24 @@ function App() {
             onChange={handleInputChange}
             style={{
               resize: "horizontal",
-              minWidth: "20rem",
-              width: "20rem",
-              minHeight: "40rem",
             }}
           />
           <div>
-            <button type="submit">{">"}</button>
+            <pre
+              style={{
+                height: "100%",
+                margin: "0",
+                width: "100%",
+                background: "#EFEFEF",
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {output}
+            </pre>
           </div>
-          <pre style={{ margin: "0", width: "100%", background: "#EFEFEF" }}>
-            {output}
-          </pre>
         </div>
       </form>
-    </div>
+    </main>
   );
 }
 
