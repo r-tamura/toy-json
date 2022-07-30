@@ -9,6 +9,17 @@ fn JSONが文字列だけのとき文字列が表示される() {
     assert.stdout("\"string\"\n");
 }
 
+#[test]
+fn JSONがユニコードエスケープされた文字列だけのとき_ダブルクォーテーションで括られた文字列が表示される(
+) {
+    let mut cmd = Command::cargo_bin("tj").unwrap();
+    let assert = cmd
+        .write_stdin(r#""\u30CF\u30ED\u30FC\u30EF\u30FC\u30EB\u30C9\u2600\uFE0F""#)
+        .args(&["-M"])
+        .assert();
+    assert.stdout("\"ハローワールド☀️\"\n");
+}
+
 const INPUT_JSON_OBJECT: &str = r#"{
 "name": "Mr.X",
 "age": 30,
