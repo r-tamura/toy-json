@@ -7,8 +7,14 @@ A toy json processor witten in Rust
 
 ### CLI
 
+#### Install
+
+[Download](https://github.com/r-tamura/toy-json/releases)
+
+#### Example
+
 ```shell
-cat <<EOT | ./target/release/tj
+$ cat <<EOT | ./target/release/tj
 {"Hello, Wasm!": true, "list"
       : [1,
         2,
@@ -52,6 +58,16 @@ fn main() {
     }
 }
 ```
+
+## Using from Python
+
+[Using from Python](./examples/python/README.md)
+
+## Using on Web
+
+[Using on Web](./examples/wasm/README.md)
+
+[Demo](https://rtam.xyz/toy-json)
 
 ## Development
 

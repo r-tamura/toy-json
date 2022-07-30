@@ -1,6 +1,6 @@
 # Toy json wasm example
 
-## Prerequsite
+## Prerequsites
 
 - wasm-pack
 - node.js
