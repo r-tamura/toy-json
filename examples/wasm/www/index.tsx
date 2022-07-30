@@ -35,14 +35,43 @@ function useDebounce(f: Function, delay: number, deps: React.DependencyList) {
   }, [delay, ...deps]);
 }
 
+function useToggle(initialValue = false) {
+  const [on, set] = React.useState(initialValue);
+
+  const toggle = React.useCallback(() => {
+    set((prev) => !prev);
+  }, [on, set]);
+
+  return [on, toggle, set] as const;
+}
+
 const SAMPLES: Record<string, Sample> = {
+  シンプルオブジェクト: {
+    name: "シンプルオブジェクト",
+    json: `{"Image": {"Width":  800,"Height": 600,"Title":  "View from 15th Floor","Thumbnail": {"Url":"http://www.example.com/image/481989943","Height": 125,"Width":  100},"Animated" : false,"IDs": [116, 943, 234, 38793]}}`,
+  },
+  文字列: {
+    name: "文字列",
+    json: `"Hello, World!"`,
+  },
+  数値: {
+    name: "数値",
+    json: `3.1415`,
+  },
   いろいろなデータ型: {
     name: "いろいろなデータ型",
-    json: `{"Hello, Wasm!": true, "list"
+    json: `{
+      "number": 42,
+"boolean": true, "string":
+                "Hello, World!"
+
+                ,"nullType": null,
+                "array"
       : [1,
         2,
 
     3], "object": {
+
             "prop1":
       "日本語", "prop2": "🎯🌀"
 
@@ -52,12 +81,17 @@ const SAMPLES: Record<string, Sample> = {
     name: "空オブジェクト",
     json: "{}",
   },
+  Unicode: {
+    name: "Unicode",
+    json: String.raw`{"key": "\u30CF\u30ED\u30FC\u30EF\u30FC\u30EB\u30C9\u2600\uFE0F"}`,
+  },
 };
 
 function App() {
   const [sample, setSample] = React.useState(Object.keys(SAMPLES)[0]);
   const [input, setInput] = React.useState("");
   const [output, setOutput] = React.useState("");
+  const [format, toggleFormat] = useToggle(true);
 
   React.useEffect(() => {
     if (sample === "custom") {
@@ -83,14 +117,14 @@ function App() {
         if (input === "") {
           return "";
         }
-        setOutput(toyJson.format(input, 2));
+        setOutput(toyJson.format(input, format ? 2 : 0));
       } catch (err) {
         setOutput(`Failed to parse JSON:\n ${err}`);
         // throw err;
       }
     },
     1000,
-    [input, setOutput]
+    [input, setOutput, format]
   );
 
   function handleSubmit(e: React.FormEvent) {
@@ -102,7 +136,7 @@ function App() {
     <main style={{ padding: "0 2rem" }}>
       <h1>toy-json-wasm demo</h1>
       <form onSubmit={handleSubmit}>
-        <section style={{ display: "flex", gap: "1rem" }}>
+        <section style={{ display: "flex", gap: "1rem", padding: "1rem 0" }}>
           <div>
             <label>
               サンプル:
@@ -116,6 +150,16 @@ function App() {
                   </option>
                 ))}
               </select>
+            </label>
+          </div>
+          <div>
+            <label>
+              Format:
+              <input
+                type="checkbox"
+                checked={format}
+                onChange={(e) => toggleFormat()}
+              />
             </label>
           </div>
         </section>

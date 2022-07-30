@@ -33,7 +33,7 @@ pub fn format(s: &str, indent: usize) -> Result<String, JsValue> {
         Some(Ok(value)) => {
             let dump_options = toy_json::ast::DumpOptions {
                 color: false,
-                pretty_print: true,
+                pretty_print: if indent == 0 { false } else { true },
                 indent,
             };
             Ok(value.dump(&dump_options))
