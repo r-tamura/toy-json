@@ -90,7 +90,6 @@ const SAMPLES: Record<string, Sample> = {
 function App() {
   const [sample, setSample] = React.useState(Object.keys(SAMPLES)[0]);
   const [input, setInput] = React.useState("");
-  const [output, setOutput] = React.useState("");
   const [format, toggleFormat] = useToggle(true);
 
   React.useEffect(() => {
@@ -105,27 +104,39 @@ function App() {
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    console.debug(e.target.value);
     e.preventDefault();
     e.stopPropagation();
     setInput(e.target.value);
     setSample("custom");
   }
 
-  useDebounce(
-    () => {
-      try {
-        if (input === "") {
-          return "";
-        }
-        setOutput(toyJson.format(input, format ? 2 : 0));
-      } catch (err) {
-        setOutput(`Failed to parse JSON:\n ${err}`);
-        // throw err;
-      }
-    },
-    1000,
-    [input, setOutput, format]
-  );
+  let output;
+  try {
+    if (input === "") {
+      output = "";
+    } else {
+      output = toyJson.format(input, format ? 2 : 0);
+    }
+  } catch (err) {
+    output = `Failed to parse JSON:\n ${err}`;
+  }
+
+  // useDebounce(
+  //   () => {
+  //     try {
+  //       if (input === "") {
+  //         return "";
+  //       }
+  //       setOutput(toyJson.format(input, format ? 2 : 0));
+  //     } catch (err) {
+  //       setOutput(`Failed to parse JSON:\n ${err}`);
+  //       // throw err;
+  //     }
+  //   },
+  //   1000,
+  //   [input, setOutput, format]
+  // );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,6 +168,7 @@ function App() {
               Format:
               <input
                 type="checkbox"
+                style={{ fontFamily: "monospace;" }}
                 checked={format}
                 onChange={(e) => toggleFormat()}
               />
@@ -176,7 +188,7 @@ function App() {
         >
           <textarea
             value={input}
-            onChange={handleInputChange}
+            onInput={handleInputChange}
             style={{
               resize: "horizontal",
             }}

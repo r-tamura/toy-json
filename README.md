@@ -1,6 +1,6 @@
 # toy json
 
-A toy json processor witten in Rust
+A toy json processor written in Rust
 
 ## Usage
 
@@ -61,11 +61,11 @@ fn main() {
 
 ## Using from Python
 
-[Using from Python](./examples/python/README.md)
+[Using from Python](./examples/python/)
 
 ## Using on Web
 
-[Using on Web](./examples/wasm/README.md)
+[Using on Web](./examples/wasm/)
 
 [Demo](https://rtam.xyz/toy-json)
 
@@ -78,5 +78,3 @@ fn main() {
 - [x] wasm
 - [x] unicode
 - [x] ci
-
-
